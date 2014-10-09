@@ -1,138 +1,75 @@
 #include "compute-commutators.h"
 #include "compute-commutators-util.h"
 
+#include <algorithm>
 #include <ctime>
+#include <fstream>
+#include <iostream>
+#include <regex>
 
 namespace compute_commutators {
 
-typedef compute_commutators_util::single_coeffs single_coeffs;
+ComputeCommutators::ComputeCommutators(bool verbose) : verbose(verbose) {} 
 
-ComputeCommutators::ComputeCommutators(int n, bool verbose) : num_orbitals(n),
-    verbose(verbose) {} 
+void ComputeCommutators::AddInitialTerms(std::string file_name) {
+  std::string line;
+  std::ifstream file(file_name);
+  // Check for lines that are formatted as indices and coefficient.
+  std::regex regex_filter("\[0-9]+\.\[0-9]+|\[0-9]+");
+  if (file.is_open()) {
+    while (std::getline(file, line)) {
+      if (std::regex_search(line, regex_filter)) {
+        std::vector<std::string> split_line = compute_commutators_util
+            ::ComputeCommutatorsUtil::Split(line);
+        if (split_line.size() == 3) {
+          term curr_term;
+          // Note that orbitals are 0-indexed so we need to add 1 to
+          // everything
+          const int& p = std::stoi(split_line[0], nullptr, 10) + 1;
+          const int& q = std::stoi(split_line[1], nullptr, 10) + 1;
+          const double& curr_coeff = std::stof(split_line[2], nullptr);
+          curr_term.push_back(p);
+          curr_term.push_back(-1 * q);
 
-std::set<term>::iterator ComputeCommutators::InitialCoeffSeen(const int& one,
-    const int& two, const int& three, const int& four) {
-  term permutation;
-  permutation.push_back(one);
-  permutation.push_back(two);
-  permutation.push_back(three);
-  permutation.push_back(four);
-  return unique_coeffs.find(permutation);
-}
+          initial_terms_to_coefficients.AddNormalForm(curr_term, curr_coeff);
 
-std::vector<single_coeffs> ComputeCommutators::GetInitialSumCoeffs(
-    std::vector<int> curr_coeff_term) {
-  // Return a sum of single_coeffs that has just one coeff in the sum (the
-  // one corresponding to the initial term).
-  single_coeffs curr_coeff;
-  std::multiset<std::vector<int> > prod_of_coeffs;
-  // If a pq term, check for pq = qp symmetry. If a pqrs term, check for
-  // pqrs = sqrp = prqs = srqp = qpsr = rqps = qspr = rspq symmetry 
-  // (We use the convention h_{pqrs}[p,q,-r,-s])
-  if (curr_coeff_term.size() == 2) {
-    // swap so that we consistently have [p, q] with p < q
-    std::sort(curr_coeff_term.begin(), curr_coeff_term.end());
-  } else if (curr_coeff_term.size() == 4) {
-    // Check if 7 permutations already seen.
-    // First check sqrp.
-    std::set<term>::iterator seen =
-        InitialCoeffSeen(curr_coeff_term[3], curr_coeff_term[1],
-          curr_coeff_term[2], curr_coeff_term[0]);
-    if (seen  == unique_coeffs.end()) { 
-      // Now check prqs.
-      seen = InitialCoeffSeen(curr_coeff_term[0], curr_coeff_term[2],
-          curr_coeff_term[1], curr_coeff_term[3]);
-      if (seen  == unique_coeffs.end()) { 
-        // Now check srqp.
-        seen = InitialCoeffSeen(curr_coeff_term[3], curr_coeff_term[2],
-          curr_coeff_term[1], curr_coeff_term[0]);
-        if (seen  == unique_coeffs.end()) { 
-          // Now check qpsr.
-          seen = InitialCoeffSeen(curr_coeff_term[1], curr_coeff_term[0],
-            curr_coeff_term[3], curr_coeff_term[2]);
-          if (seen  == unique_coeffs.end()) { 
-            // Now check rqps.
-            seen = InitialCoeffSeen(curr_coeff_term[2], curr_coeff_term[1],
-              curr_coeff_term[0], curr_coeff_term[3]);
-            if (seen  == unique_coeffs.end()) { 
-              // Now check qspr.
-              seen = InitialCoeffSeen(curr_coeff_term[1], curr_coeff_term[3],
-                curr_coeff_term[0], curr_coeff_term[2]);
-              if (seen  == unique_coeffs.end()) { 
-                // Now check rspq.
-                seen = InitialCoeffSeen(curr_coeff_term[2], curr_coeff_term[3],
-                  curr_coeff_term[0], curr_coeff_term[1]);
-              }
-            }
-          }
-        }
+          num_orbitals = std::max(num_orbitals, p);
+          num_orbitals = std::max(num_orbitals, q);
+        } else if (split_line.size() == 5) {
+          term curr_term;
+          // Note that orbitals are 0-indexed so we need to add 1 to
+          // everything
+          const int& p = std::stoi(split_line[0], nullptr, 10) + 1;
+          const int& q = std::stoi(split_line[1], nullptr, 10) + 1;
+          const int& r = std::stoi(split_line[2], nullptr, 10) + 1;
+          const int& s = std::stoi(split_line[3], nullptr, 10) + 1;
+          const double& curr_coeff = std::stof(split_line[4], nullptr) / -2.0;
+          curr_term.push_back(p);
+          curr_term.push_back(q);
+          curr_term.push_back(-1 * r);
+          curr_term.push_back(-1 * s);
+
+          initial_terms_to_coefficients.AddNormalForm(curr_term, curr_coeff);
+
+          num_orbitals = std::max(num_orbitals, p);
+          num_orbitals = std::max(num_orbitals, q);
+          num_orbitals = std::max(num_orbitals, r);
+          num_orbitals = std::max(num_orbitals, s);
+        } 
       }
     }
-    // If we've seen it before in one of the 7 permutations, set it equal to
-    // what was already seen before.
-    if (seen != unique_coeffs.end()) {
-      curr_coeff_term = *seen;
-    } else {
-      // We haven't seen it before, so add to set.
-      unique_coeffs.insert(curr_coeff_term);
-    }
+    file.close();
+  } else {
+    fprintf(stderr, "Unable to open file.\n");
   }
-  prod_of_coeffs.insert(curr_coeff_term);
-  curr_coeff.product_of_coeffs = prod_of_coeffs;
-  std::vector<single_coeffs> sum_of_coeffs;
-  sum_of_coeffs.push_back(curr_coeff);
 
-  return sum_of_coeffs;
-}
-
-void ComputeCommutators::AddInitialTerms() {
-  for (int p = 1; p <= num_orbitals; ++p) {
-    for (int q = 1; q <= num_orbitals; ++q) {
-      // pq term.
-      term curr_term;
-      curr_term.push_back(p);
-      curr_term.push_back(-1 * q);
-      term curr_coeff_term;
-      curr_coeff_term.push_back(p);
-      curr_coeff_term.push_back(q);
-
-      initial_terms_to_coefficients.AddNormalForm(curr_term,
-          GetInitialSumCoeffs(curr_coeff_term));
-
-      for (int r = 1; r <= num_orbitals; ++r) {
-        for (int s = 1; s <= num_orbitals; ++s) {
-          // Only add term if it preserves spin parity
-          if ((r % 2) + (s % 2) == (p % 2) + (q % 2)) {
-            // pqrs term.
-            term curr_term;
-            curr_term.push_back(p);
-            curr_term.push_back(q);
-            curr_term.push_back(-1 * r);
-            curr_term.push_back(-1 * s);
-            term curr_coeff_term;
-            curr_coeff_term.push_back(p);
-            curr_coeff_term.push_back(q);
-            curr_coeff_term.push_back(r);
-            curr_coeff_term.push_back(s);
-
-            initial_terms_to_coefficients.AddNormalForm(curr_term,
-                GetInitialSumCoeffs(curr_coeff_term));
-          }
-        }
-      }
-    }
-  } 
   initial_terms_to_coefficients.RemoveComplexConjugates();
-  // Put all the keys into initial_terms
+
+  // Put all the keys into initial_terms.
   for (auto it = initial_terms_to_coefficients.Begin();
       it != initial_terms_to_coefficients.End(); ++it) {
     initial_terms.insert(it->first);
-fprintf(stderr, "\nTerm\n");
-compute_commutators_util::ComputeCommutatorsUtil::PrintIndices(stderr, it->first);
-fprintf(stderr, "\nCoeff\n");
-compute_commutators_util::ComputeCommutatorsUtil::PrintSumOfCoeffs(stderr, it->second);
   }
-  fprintf(stderr, "Initial terms size: %lu\n", initial_terms.size());
 }
 
 void ComputeCommutators::AddTermToInterleavedOrder(const term& curr_term) {
@@ -209,23 +146,20 @@ void ComputeCommutators::InterleaveTerms() {
       fprintf(stderr, "Term: ");
       compute_commutators_util::ComputeCommutatorsUtil::PrintIndices(stderr,
           curr_term);
-      fprintf(stderr, "\nCoeff: ");
-      compute_commutators_util::ComputeCommutatorsUtil::PrintSumOfCoeffs(
-          stderr, initial_terms_to_coefficients.At(curr_term));
-      fprintf(stderr, "\n");
+      fprintf(stderr, " Coeff: %f\n",
+          initial_terms_to_coefficients.At(curr_term));
     }
   }
   fprintf(stderr, "Number of terms in interleaved order: %lu\n",
       interleaved_order.size());
 }
 
-std::pair<std::vector<term>, std::vector<single_coeffs> > ComputeCommutators
+std::pair<std::vector<term>, double> ComputeCommutators
     ::GetTermForTrotter(const int& index) {
   term curr_term = interleaved_order[index];
   term curr_conjugate = compute_commutators_util::ComputeCommutatorsUtil
       ::GetConjugate(curr_term);
-  std::vector<single_coeffs> curr_coeff =
-      initial_terms_to_coefficients.At(curr_term);
+  double curr_coeff = initial_terms_to_coefficients.At(curr_term);
   std::vector<term> term_and_conjugate;
   if (!curr_conjugate.empty()) {
     // return both term and conjugate if conjugate and term differ
@@ -253,40 +187,36 @@ void ComputeCommutators::CalculateTrotterError() {
   // ((1 - delta(A, B) / 2) / 12) * (ABC - ACB - BCA + CBA)
 
   // Loop over B.
-  for (int b = 0; b < num_terms; ++b) {
+  for (int b = 1; b < num_terms; ++b) {
     const auto& B_term_coeff = GetTermForTrotter(b);
-    std::vector<term> B_terms = B_term_coeff.first;
-    std::vector<single_coeffs> B_coeff = B_term_coeff.second;
+    const std::vector<term>& B_terms = B_term_coeff.first;
+    const double&  B_coeff = B_term_coeff.second;
 
     // Loop over A.
     for (int a = 0; a <= b; ++a) {
       const auto& A_term_coeff = GetTermForTrotter(a);
-      std::vector<term> A_terms = A_term_coeff.first;
-      std::vector<single_coeffs> A_coeff = A_term_coeff.second;
+      const std::vector<term>& A_terms = A_term_coeff.first;
+      const double& A_coeff = A_term_coeff.second;
 
       // Loop over C.
       for (int c = 0; c < b; ++c) {
         const auto& C_term_coeff = GetTermForTrotter(c);
-        std::vector<term> C_terms = C_term_coeff.first;
-        std::vector<single_coeffs> C_coeff = C_term_coeff.second;
+        const std::vector<term>& C_terms = C_term_coeff.first;
+        const double& C_coeff = C_term_coeff.second;
        
         // Increment counter.
         counter += 1;
 
         // Calculate the coefficient (multiplying the 3 terms). 
-        std::vector<single_coeffs> multiplied_coeffs = compute_commutators_util
-            ::ComputeCommutatorsUtil::MultiplySumOfCoeffs(A_coeff, B_coeff);
-        multiplied_coeffs = compute_commutators_util::ComputeCommutatorsUtil
-            ::MultiplySumOfCoeffs(multiplied_coeffs, C_coeff);
+        double multiplied_coeffs = A_coeff * B_coeff * C_coeff;
         // To handle the scale (each coefficient needs to be multipled by 1 / 24
         // if a == b, or 1 / 12 if not): we multiply the coefficient by 2 if
         // a is not equal to b, and divide everything by 24 in the very end.
         // This allows us to keep coefficients as ints. 
         if (a == b) {
-          for (auto it = multiplied_coeffs.begin();
-              it != multiplied_coeffs.end(); ++it) {
-            it->integer_multiplier *= 2;
-          }
+          multiplied_coeffs /= 24.0; 
+        } else {
+          multiplied_coeffs /= 12.0;
         }
 
         // Compute commutators.
@@ -299,23 +229,18 @@ void ComputeCommutators::CalculateTrotterError() {
                 final_terms_to_coefficients.AddNormalForm(
                     compute_commutators_util::ComputeCommutatorsUtil::
                     ConcatenateThreeTerms(A, B, C), multiplied_coeffs);
+                // ACB term
+                final_terms_to_coefficients.AddNormalForm(
+                    compute_commutators_util::ComputeCommutatorsUtil::
+                    ConcatenateThreeTerms(A, C, B), -1 * multiplied_coeffs);
+                // BCA term
+                final_terms_to_coefficients.AddNormalForm(
+                    compute_commutators_util::ComputeCommutatorsUtil::
+                    ConcatenateThreeTerms(B, C, A), -1 * multiplied_coeffs);
                 // CBA term
                 final_terms_to_coefficients.AddNormalForm(
                     compute_commutators_util::ComputeCommutatorsUtil::
                     ConcatenateThreeTerms(C, B, A), multiplied_coeffs);
-                // Flip sign on coefficients for ACB and BCA terms.
-                for (auto it = multiplied_coeffs.begin();
-                    it != multiplied_coeffs.end(); ++it) {
-                  it->integer_multiplier *= -1;
-                }
-                // ACB term
-                final_terms_to_coefficients.AddNormalForm(
-                    compute_commutators_util::ComputeCommutatorsUtil::
-                    ConcatenateThreeTerms(A, C, B), multiplied_coeffs);
-                // BCA term
-                final_terms_to_coefficients.AddNormalForm(
-                    compute_commutators_util::ComputeCommutatorsUtil::
-                    ConcatenateThreeTerms(B, C, A), multiplied_coeffs);
               }
             }
           }
@@ -345,10 +270,7 @@ void ComputeCommutators::PrintFinalResults(FILE* output) {
       it != final_terms_to_coefficients.End(); ++it) {
     compute_commutators_util::ComputeCommutatorsUtil::PrintIndices(output,
         it->first);
-    fprintf(output, "\n");
-    compute_commutators_util::ComputeCommutatorsUtil::PrintSumOfCoeffs(output,
-        it->second);
-    fprintf(output, "\n\n");
+    fprintf(output, " %.16e\n", it->second);
   }
 }
 

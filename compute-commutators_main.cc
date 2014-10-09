@@ -2,32 +2,34 @@
 
 int main(int argc, char* argv[])
 {
-  if (argc < 2 || argc > 3) {
-    printf("Usage: ./compute-commutators num_orbitals for verbose version or\n"
-        "./compute-commutators num_orbitals F for non-verbose version.\n");
-    exit(1);
+  if (argc < 3 || argc > 4) {
+    printf("Usage: ./compute-commutators molecule basis (verbose version) or\n"
+        "./compute-commutators molecule basis (non-verbose version).\n");
+    return(1);
   } 
   bool verbose;
-  if (argc == 2) {
+  if (argc == 3) {
     verbose = true;
-  } else if (*argv[2] == 'F' || *argv[2] == 'f') {
+  } else if (*argv[3] == 'F' || *argv[3] == 'f') {
     verbose = false;
   } else {
-    printf("Usage: ./compute-commutators num_orbitals for verbose version or\n"
-        "./compute-commutators num_orbitals F for non-verbose version.\n");
-    exit(2);
+    printf("Usage: ./compute-commutators molecule basis (verbose version) or\n"
+        "./compute-commutators molecule basis (non-verbose version).\n");
+    return(2);
   }
+
+  std::string in_file_name = "data/from_jarrod/" + std::string(argv[1]) + "-" +
+      std::string(argv[2]) + ".int";
   compute_commutators::ComputeCommutators compute_commutators =
-      compute_commutators::ComputeCommutators(std::atoi(argv[1]),
-      verbose);
-  compute_commutators.AddInitialTerms();
+      compute_commutators::ComputeCommutators(verbose);
+  compute_commutators.AddInitialTerms(in_file_name);
   compute_commutators.InterleaveTerms();
   compute_commutators.CalculateTrotterError();
 
   // Print results.
-  char file_name[80]; 
-  sprintf(file_name, "%s.txt", argv[1]);
-  FILE *file_p = fopen(file_name, "w");
+  char out_file_name[80]; 
+  sprintf(out_file_name, "data/error_terms/%s_%s.txt", argv[1], argv[2]);
+  FILE *file_p = fopen(out_file_name, "w");
   compute_commutators.PrintFinalResults(file_p);
   return 0;
 }

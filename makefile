@@ -2,7 +2,7 @@
 # is the number of orbitals. Symbolically stores both hamiltonian terms
 # and coefficients that may be plugged in later.
 
-CC = g++ -std=c++11
+CC = g++ -std=c++11 -stdlib=libc++
 CFLAGS = -Wall -g
 LDFLAGS = -lm
 

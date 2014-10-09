@@ -33,3 +33,6 @@ compute-commutators
 
 # txt files
 *.txt
+
+# integrals
+*.int
